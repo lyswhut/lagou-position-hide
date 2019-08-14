@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         拉勾网职位隐藏脚本
 // @namespace    https://greasyfork.org/zh-CN/scripts/388495-%E6%8B%89%E5%8B%BE%E7%BD%91%E8%81%8C%E4%BD%8D%E9%9A%90%E8%97%8F%E8%84%9A%E6%9C%AC
-// @version      0.1
+// @version      0.2.0
 // @description  隐藏拉勾网职位搜索列表的指定职位或公司
 // @author       lyswhut
 // @match        https://www.lagou.com/jobs/list_*
 // @run-at       document-start
+// @license      MIT
 // @grant        none
 // ==/UserScript==
 
@@ -14,93 +15,24 @@
   window.__tools__ = {
     hideCompany: [],
     hidePosition: [],
-    isFirst: true,
     jq: null,
+    lgAjax: null,
     list: [],
-    lgAjax(options) {
-      var w = {},
-        h = !1
-      if (
-        (options.needNoToken ||
-          (options.headers = {
-            'X-Anit-Forge-Token': window.X_Anti_Forge_Token || 'None',
-            'X-Anit-Forge-Code': window.X_Anti_Forge_Code || '0',
-          }),
-        options.success)
-      ) {
-        h = !0
-        for (var i in options)
-          switch (i) {
-            case 'success':
-            case 'error':
-              break
-            default:
-              w[i] = options[i]
-          }
-      } else w = jQuery.extend({}, options)
 
-      return jQuery
-        .ajax(w)
-        .done((a, w, b) => {
-          if (options.url.includes('positionAjax'))
-            window.__tools__.filterData(a)
-          window.__tools__.done(a, w, b, h, options)
-        })
-        .fail(function(a, w, b) {
-          h && options.error && options.error(a, w, b)
-        })
+    // 代理拉勾ajax
+    proxyLgajax(options) {
+      if (options.url.includes('positionAjax')) {
+        options.success = window.__tools__.proxySuccess(options.success)
+      }
+      return window.__tools__.lgAjax(options)
     },
-    done(a, w, b, h, options) {
-      if (!options.needNoToken)
-        try {
-          a &&
-            jQuery.submitToken &&
-            jQuery.submitCode &&
-            ((window.X_Anti_Forge_Token = jQuery.submitToken),
-            (window.X_Anti_Forge_Code = jQuery.submitCode))
-        } catch (e) {}
-      var k = window.encodeURIComponent(window.location.href),
-        g = window.location.host
-      if (a && jQuery.state)
-        switch (jQuery.state) {
-          case 2402:
-            window.location.href =
-              'https://' + g + '/utrack/trackMid.html?f=' + k
-            break
-          case 2403:
-            window.location.href = 'https://passport.lagou.com/login/login.html'
-            break
-          case 2404:
-            window.location.href =
-              'https://' + g + '/utrack/verify.html?t=1&f=' + k
-            break
-          case 2405:
-            window.location.href =
-              'https://sec.lagou.com/verify.html?e=' +
-              jQuery.errorcode +
-              '&f=' +
-              k
-            break
-          case 2406:
-            window.location.href =
-              'https://sec.lagou.com/sms/verify.html?e=' +
-              jQuery.errorcode +
-              '&f=' +
-              k
-            break
-          case 2407:
-            window.location.href =
-              'https://forbidden.lagou.com/forbidden/fbi.html'
-            break
-          case 2408:
-            window.location.href =
-              'https://forbidden.lagou.com/forbidden/fbh.html'
-            break
-          case 2409:
-            window.location.href =
-              'https://forbidden.lagou.com/forbidden/fbl.html'
-        }
-      h && options.success && options.success(a, w, b)
+
+    // 代理响应成功函数
+    proxySuccess(fn) {
+      return function (data, textStatus, jqXHR) {
+        window.__tools__.filterData(data)
+        fn(data, textStatus, jqXHR)
+      }
     },
 
     // 过滤职位
@@ -183,8 +115,11 @@
     // hook拉勾ajax
     hookLgajax() {
       Object.defineProperty(this.jq, 'lgAjax', {
+        set: v => {
+          this.lgAjax = v
+        },
         get: () => {
-          return this.lgAjax
+          return this.proxyLgajax
         },
       })
     },
